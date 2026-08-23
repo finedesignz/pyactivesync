@@ -114,57 +114,6 @@ sync with a local cache.
 **Not implemented**: `MeetingResponse`, `ValidateCert`, `SmartForward`/`SmartReply`.
 Documented as unimplemented, not silently missing.
 
-**Non-goals**: an EAS *server*; Autodiscover (pass a server hostname
-directly); Calendar/Contacts *write* operations (read via `Sync` is
-supported); NTLM auth (Basic auth only -- `requests` doesn't do NTLM
-without an extra dependency); credential storage of any kind (that's the
-caller's business).
-
-EAS 16.1 supports client-originated `Sync` Add for draft email only.
-`create_email_draft()` therefore expects the Drafts collection and stores the
-stdlib message as a MIME body, including attachments. It does not provide an
-IMAP-style arbitrary-folder `APPEND`: Exchange reports item status `6` for a
-non-draft email addition. The result always includes the advanced collection
-`SyncKey`, the caller-supplied or generated `ClientId`, and the per-item
-status; successful additions also include the assigned `ServerId`.
-Live EAS 16.1 testing confirmed that Exchange accepts this MIME draft path,
-including attachment round-trips and read/follow-up flag state.
-
-`fetch_item()` returns a typed `FetchedItem`, not a flattened property map.
-Its ordered `bodies` and `attachments` lists preserve repeated EAS containers;
-`body` is a convenience alias for the first body. MIME body data is returned
-as bytes, and each attachment retains its own file reference, display name,
-size, method, content identifiers, and inline state. Other scalar properties
-remain available through `FetchedItem.fields`.
-
-`send_mail()` accepts an optional `client_id=` of 1 to 40 characters. When it
-is omitted, pyactivesync generates a UUID as before. A bridge can persist and
-supply this identifier before submitting a message, but caller control does
-not by itself make an ambiguous SendMail safe to retry: duplicate-ClientId
-behavior is server-dependent, and pyactivesync never automatically retries
-this non-idempotent command.
-
-A `FreeText` condition on the `Search` command itself is known to fail
-against real Exchange servers with `Store.Status=110`, a server-side bug
-in EAS's `Search` handling rather than a WBXML encoding issue (confirmed
-by cross-checking the same mailbox's content index through an unrelated
-protocol, which returns correct results for the same query; re-confirmed
-live as of 2026-08-23 -- still broken server-side). `search_mailbox()`
-accepts a `free_text=` parameter anyway: when given, it transparently
-reroutes the request through the EAS 16.1 `Find` command instead (see
-below), which implements full-text search correctly, and adapts the
-result back to `search_mailbox()`'s normal `list[dict[str, str]]` shape.
-Pass exactly one of `date_received_after=` or `free_text=`.
-
-EAS 16.1's separate `Find` command is also available directly through
-`find_mailbox()` and `find_gal()`. Both return a `FindResult` containing
-the server's status, range, actual number of returned items, reusable
-search id, and flattened result properties. Call `find_mailbox()` directly
-instead of `search_mailbox(free_text=...)` when you need pagination
-(`range_start=`/`search_id=`) or the raw `FindResult`. `FindResult.total`
-is computed from the returned results rather than trusting the server's
-advisory `Find:Total` value.
-
 ## Development
 
 ```

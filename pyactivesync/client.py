@@ -512,16 +512,21 @@ class Client:
     ) -> EmailAddResult:
         """Create one draft email through EAS 16.1 ``Sync Add``.
 
+        EAS 16.1 supports client-originated ``Sync`` Add for draft email
+        only -- there is no IMAP-style arbitrary-folder ``APPEND``.
         ``folder_id`` should identify the mailbox's Drafts folder and
-        ``sync_key`` must be its latest non-zero key.  EAS supports adding
-        email only as a draft; Exchange rejects non-draft additions with item
-        status ``"6"``.  The returned key must be used for the next operation
-        on this collection.
+        ``sync_key`` must be its latest non-zero key.  Exchange rejects
+        non-draft additions with item status ``"6"``.  The result always
+        includes the advanced collection ``SyncKey`` and the ``ClientId``;
+        successful additions also include the assigned ``ServerId``.  The
+        returned key must be used for the next operation on this collection.
 
         The complete stdlib message is stored as a MIME body, preserving its
         headers, body alternatives, and attachments.  ``client_id`` is
         generated when omitted and can be supplied by callers that need to
-        correlate an operation with durable local state.
+        correlate an operation with durable local state.  Live EAS 16.1
+        testing confirmed Exchange accepts this MIME draft path, including
+        attachment round-trips and read/follow-up flag state.
         """
         if not folder_id:
             raise ValueError("folder_id must not be empty")
@@ -682,8 +687,15 @@ class Client:
     def fetch_item(self, folder_id: str, item_id: str, *, body_type: BodyType = BodyType.HTML) -> FetchedItem:
         """``ItemOperations`` Fetch preserving bodies and attachment metadata.
 
+        Returns a typed ``FetchedItem``, not a flattened property map. Its
+        ordered ``bodies`` and ``attachments`` lists preserve repeated EAS
+        containers; ``body`` is a convenience alias for the first body. Other
+        scalar properties remain available through ``FetchedItem.fields``.
+
         The operation does not mark the item read. MIME body data is returned
         as bytes; plain text, HTML, and RTF data retain the WBXML value type.
+        Each attachment retains its own file reference, display name, size,
+        method, content identifiers, and inline state.
         """
         self._ensure_provisioned()
         option_children = [
@@ -1071,13 +1083,16 @@ class Client:
         ``free_text``. Exactly one of the two must be given.
 
         A ``FreeText`` condition on the ``Search`` command itself is known to
-        fail against real servers with ``Store.Status=110`` (a confirmed
-        server-side bug, not a WBXML encoding issue). ``free_text=`` here is
-        served through the EAS 16.1 ``Find`` command instead (see
-        ``find_mailbox``), which implements full-text search correctly, and
-        the result is adapted back to this method's ``list[dict[str, str]]``
-        shape. Callers who need pagination or the raw ``FindResult`` should
-        call ``find_mailbox`` directly.
+        fail against real servers with ``Store.Status=110`` -- a server-side
+        bug in EAS's ``Search`` handling, not a WBXML encoding issue
+        (confirmed by cross-checking the same mailbox's content index through
+        an unrelated protocol, which returns correct results for the same
+        query; re-confirmed live as of 2026-08-23 -- still broken
+        server-side). ``free_text=`` here is served through the EAS 16.1
+        ``Find`` command instead (see ``find_mailbox``), which implements
+        full-text search correctly, and the result is adapted back to this
+        method's ``list[dict[str, str]]`` shape. Callers who need pagination
+        or the raw ``FindResult`` should call ``find_mailbox`` directly.
         """
         if (date_received_after is None) == (free_text is None):
             raise ValueError("pass exactly one of date_received_after or free_text")
