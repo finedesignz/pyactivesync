@@ -22,7 +22,7 @@ from email.message import EmailMessage
 
 import pytest
 
-from pyactivesync import BodyType, Client, EmailChange, FetchedItem, FolderType, OofState
+from pyactivesync import BodyType, Client, Contact, ContactChange, EmailChange, FetchedItem, FolderType, OofState
 from pyactivesync.exceptions import StatusError
 
 
@@ -217,6 +217,63 @@ def test_create_email_draft_only_touches_its_own_item(live_client: Client) -> No
             [EmailChange(created.server_id, delete=True)],
             deletes_as_moves=False,
         )
+
+
+def test_create_update_delete_contact_only_touches_its_own_item(live_client: Client) -> None:
+    """Create -> update -> delete one contact through Sync Add/Change/Delete,
+    verifying the written fields via fetch_item/sync_folder at each step."""
+    contacts_folder = next(f for f in live_client.list_folders() if f.type == FolderType.CONTACTS)
+    bootstrap = live_client.sync_folder(contacts_folder.id)
+    marker = f"pyactivesync-test-{uuid.uuid4().hex[:8]}"
+
+    created = live_client.create_contact(
+        contacts_folder.id,
+        bootstrap.sync_key,
+        Contact(
+            first_name=marker,
+            last_name="Lovelace",
+            email1_address="ada@example.com",
+            company_name="Analytical Engines Ltd",
+            categories=("pyactivesync-test",),
+        ),
+        client_id=marker,
+    )
+    assert created.status == "1"
+    assert created.server_id
+
+    properties = live_client.fetch_item(contacts_folder.id, created.server_id)
+    assert properties.fields.get("Contacts.FirstName") == marker
+    assert properties.fields.get("Contacts.LastName") == "Lovelace"
+    # Exchange wraps a bare address as `"addr" <addr>` on round-trip.
+    assert "ada@example.com" in (properties.fields.get("Contacts.Email1Address") or "")
+
+    # A contact Sync Change does not merge on this server -- fields left off
+    # `contact` are cleared, not preserved -- so the update resends the full
+    # desired field set, not just job_title.
+    updated = live_client.apply_contact_changes(
+        contacts_folder.id,
+        created.sync_key,
+        [
+            ContactChange(
+                created.server_id,
+                contact=Contact(first_name=marker, last_name="Lovelace", job_title="Mathematician"),
+            )
+        ],
+    )
+    assert updated.statuses[created.server_id] == "1"
+    properties = live_client.fetch_item(contacts_folder.id, created.server_id)
+    assert properties.fields.get("Contacts.JobTitle") == "Mathematician"
+    assert properties.fields.get("Contacts.FirstName") == marker
+
+    deleted = live_client.apply_contact_changes(
+        contacts_folder.id,
+        updated.sync_key,
+        [ContactChange(created.server_id, delete=True)],
+        deletes_as_moves=False,
+    )
+    assert deleted.statuses[created.server_id] == "1"
+    with pytest.raises(StatusError):
+        live_client.fetch_item(contacts_folder.id, created.server_id)
 
 
 def test_search_gal_for_self(live_client: Client) -> None:

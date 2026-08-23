@@ -3,8 +3,9 @@
 A Python client library exclusively for Exchange ActiveSync (EAS) 16.1, implementing
 enough of [MS-ASCMD] (the command protocol) and [MS-ASWBXML] (the binary
 XML encoding) to talk to a real Exchange server: folder listing, mail
-sync, item/attachment fetch, sending mail, folder management, moving
-items, directory search, and push notifications via `Ping`.
+sync, item/attachment fetch, sending mail, contact writes, folder
+management, moving items, directory search, and push notifications via
+`Ping`.
 
 [MS-ASCMD]: https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-ascmd/
 [MS-ASWBXML]: https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-aswbxml/
@@ -96,8 +97,8 @@ sync with a local cache.
 | `Provision` | `Client.provision()` (also called lazily) |
 | `FolderSync` | `Client.list_folders()` |
 | `Sync` | `Client.sync_folder()` |
-| `Sync` Add | `Client.create_email_draft()` (draft email only) |
-| `Sync` item mutation | `Client.apply_email_changes()` (read/flag/delete) |
+| `Sync` Add | `Client.create_email_draft()` (draft email only), `Client.create_contact()` |
+| `Sync` item mutation | `Client.apply_email_changes()` (read/flag/delete), `Client.apply_contact_changes()` (update/delete) |
 | `GetItemEstimate` | `Client.get_item_estimate()` |
 | `ItemOperations` Fetch (item/body metadata) | `Client.fetch_item()` |
 | `ItemOperations` Fetch (attachment) | `Client.fetch_attachment()` |

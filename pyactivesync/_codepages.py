@@ -21,6 +21,29 @@ CODEPAGES: dict[str, dict[str, int]] = {
         "Limit": 0x25, "Partial": 0x26, "MaxItems": 0x28,
         "HeartbeatInterval": 0x29,
     },
+    # Contacts token values are taken verbatim from the official MS-ASWBXML
+    # spec (code page 1), not reverse-engineered.
+    "Contacts": {
+        "Anniversary": 0x05, "AssistantName": 0x06, "AssistantPhoneNumber": 0x07,
+        "Birthday": 0x08, "Business2PhoneNumber": 0x0C,
+        "BusinessAddressCity": 0x0D, "BusinessAddressCountry": 0x0E,
+        "BusinessAddressPostalCode": 0x0F, "BusinessAddressState": 0x10,
+        "BusinessAddressStreet": 0x11, "BusinessFaxNumber": 0x12,
+        "BusinessPhoneNumber": 0x13, "CarPhoneNumber": 0x14,
+        "Categories": 0x15, "Category": 0x16, "CompanyName": 0x19,
+        "Department": 0x1A, "Email1Address": 0x1B, "Email2Address": 0x1C,
+        "Email3Address": 0x1D, "FileAs": 0x1E, "FirstName": 0x1F,
+        "Home2PhoneNumber": 0x20, "HomeAddressCity": 0x21,
+        "HomeAddressCountry": 0x22, "HomeAddressPostalCode": 0x23,
+        "HomeAddressState": 0x24, "HomeAddressStreet": 0x25,
+        "HomeFaxNumber": 0x26, "HomePhoneNumber": 0x27, "JobTitle": 0x28,
+        "LastName": 0x29, "MiddleName": 0x2A, "MobilePhoneNumber": 0x2B,
+        "OfficeLocation": 0x2C, "OtherAddressCity": 0x2D,
+        "OtherAddressCountry": 0x2E, "OtherAddressPostalCode": 0x2F,
+        "OtherAddressState": 0x30, "OtherAddressStreet": 0x31,
+        "PagerNumber": 0x32, "RadioPhoneNumber": 0x33, "Spouse": 0x34,
+        "Suffix": 0x35, "Title": 0x36, "WebPage": 0x37,
+    },
     "Email": {
         "DateReceived": 0x0F, "DisplayTo": 0x11, "Importance": 0x12,
         "MessageClass": 0x13, "Subject": 0x14, "Read": 0x15, "To": 0x16,
@@ -136,6 +159,7 @@ CODEPAGES: dict[str, dict[str, int]] = {
 # arbitrary local order -- these are the values sent in SWITCH_PAGE).
 PAGE_INDEX: dict[str, int] = {
     "AirSync": 0,
+    "Contacts": 1,
     "Email": 2,
     "Move": 5,
     "ItemEstimate": 6,

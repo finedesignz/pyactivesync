@@ -16,6 +16,10 @@ from .exceptions import ProtocolError, ProvisionError, StatusError
 from .models import (
     AttachmentInfo,
     BodyType,
+    Contact,
+    ContactAddResult,
+    ContactChange,
+    ContactChangesResult,
     EmailAddResult,
     EmailChange,
     EmailChangesResult,
@@ -34,6 +38,72 @@ from .models import (
     SyncItem,
     SyncResult,
 )
+
+# Contact dataclass field name -> Contacts codepage tag name. Token values
+# are taken verbatim from the official MS-ASWBXML spec (code page 1).
+_CONTACT_FIELD_TAGS: dict[str, str] = {
+    "first_name": "FirstName",
+    "middle_name": "MiddleName",
+    "last_name": "LastName",
+    "suffix": "Suffix",
+    "title": "Title",
+    "job_title": "JobTitle",
+    "file_as": "FileAs",
+    "company_name": "CompanyName",
+    "department": "Department",
+    "office_location": "OfficeLocation",
+    "email1_address": "Email1Address",
+    "email2_address": "Email2Address",
+    "email3_address": "Email3Address",
+    "home_phone_number": "HomePhoneNumber",
+    "home2_phone_number": "Home2PhoneNumber",
+    "business_phone_number": "BusinessPhoneNumber",
+    "business2_phone_number": "Business2PhoneNumber",
+    "mobile_phone_number": "MobilePhoneNumber",
+    "business_fax_number": "BusinessFaxNumber",
+    "home_fax_number": "HomeFaxNumber",
+    "pager_number": "PagerNumber",
+    "car_phone_number": "CarPhoneNumber",
+    "radio_phone_number": "RadioPhoneNumber",
+    "assistant_name": "AssistantName",
+    "assistant_phone_number": "AssistantPhoneNumber",
+    "business_address_street": "BusinessAddressStreet",
+    "business_address_city": "BusinessAddressCity",
+    "business_address_state": "BusinessAddressState",
+    "business_address_postal_code": "BusinessAddressPostalCode",
+    "business_address_country": "BusinessAddressCountry",
+    "home_address_street": "HomeAddressStreet",
+    "home_address_city": "HomeAddressCity",
+    "home_address_state": "HomeAddressState",
+    "home_address_postal_code": "HomeAddressPostalCode",
+    "home_address_country": "HomeAddressCountry",
+    "other_address_street": "OtherAddressStreet",
+    "other_address_city": "OtherAddressCity",
+    "other_address_state": "OtherAddressState",
+    "other_address_postal_code": "OtherAddressPostalCode",
+    "other_address_country": "OtherAddressCountry",
+    "web_page": "WebPage",
+    "spouse": "Spouse",
+    "birthday": "Birthday",
+    "anniversary": "Anniversary",
+}
+
+
+def _contact_application_data(contact: Contact) -> list[NodeBuilder]:
+    children = [
+        wtag("Contacts", tag, text=value)
+        for field_name, tag in _CONTACT_FIELD_TAGS.items()
+        if (value := getattr(contact, field_name)) is not None
+    ]
+    if contact.categories:
+        children.append(
+            wtag(
+                "Contacts",
+                "Categories",
+                children=[wtag("Contacts", "Category", text=category) for category in contact.categories],
+            )
+        )
+    return children
 
 _OOF_APPLIES_TO_TAGS = {
     "Internal": "AppliesToInternal",
@@ -448,6 +518,93 @@ class Client:
                 )
             )
 
+        new_sync_key, statuses = self._sync_mutate(folder_id, sync_key, commands, statuses, deletes_as_moves)
+        return EmailChangesResult(sync_key=new_sync_key, statuses=statuses)
+
+    def apply_contact_changes(
+        self,
+        folder_id: str,
+        sync_key: str,
+        changes: Iterable[ContactChange],
+        *,
+        deletes_as_moves: bool = True,
+    ) -> ContactChangesResult:
+        """Apply contact field updates and deletes through ``Sync``.
+
+        ``sync_key`` must be the latest non-zero key returned by
+        :meth:`sync_folder` or this method. Successful changes often have no
+        per-item response in EAS, in which case their status is reported as
+        ``"1"``. Set ``deletes_as_moves=False`` for permanent deletion rather
+        than moving deleted items to the Deleted Items folder.
+
+        Live EAS testing against a real Exchange server showed a contact
+        update does not merge: properties left off ``ContactChange.contact``
+        were cleared, not preserved (unlike ``apply_email_changes``' Read/Flag
+        mutations, which are genuinely partial). Send the full desired
+        :class:`~pyactivesync.models.Contact` field set on every update.
+        """
+        if not folder_id:
+            raise ValueError("folder_id must not be empty")
+        if not sync_key or sync_key == "0":
+            raise ValueError("sync_key must be a non-zero synchronized key")
+        requested = list(changes)
+        if not requested:
+            raise ValueError("at least one contact change is required")
+
+        commands = []
+        statuses: dict[str, str] = {}
+        for change in requested:
+            if not change.server_id:
+                raise ValueError("contact change server_id must not be empty")
+            if change.server_id in statuses:
+                raise ValueError(f"duplicate contact change for server_id {change.server_id!r}")
+            contact = change.contact
+            if change.delete and contact is not None:
+                raise ValueError("a delete cannot be combined with a contact update")
+            if not change.delete and contact is None:
+                raise ValueError("contact change has no mutation")
+            statuses[change.server_id] = "1"
+
+            if change.delete:
+                commands.append(
+                    wtag(
+                        "AirSync",
+                        "Delete",
+                        children=[wtag("AirSync", "ServerId", text=change.server_id)],
+                    )
+                )
+                continue
+
+            assert contact is not None
+            application_data = _contact_application_data(contact)
+            if not application_data:
+                raise ValueError(f"contact change for server_id {change.server_id!r} has no fields set")
+            commands.append(
+                wtag(
+                    "AirSync",
+                    "Change",
+                    children=[
+                        wtag("AirSync", "ServerId", text=change.server_id),
+                        wtag("AirSync", "ApplicationData", children=application_data),
+                    ],
+                )
+            )
+
+        new_sync_key, statuses = self._sync_mutate(folder_id, sync_key, commands, statuses, deletes_as_moves)
+        return ContactChangesResult(sync_key=new_sync_key, statuses=statuses)
+
+    def _sync_mutate(
+        self,
+        folder_id: str,
+        sync_key: str,
+        commands: list[NodeBuilder],
+        statuses: dict[str, str],
+        deletes_as_moves: bool,
+    ) -> tuple[str, dict[str, str]]:
+        """Shared ``Sync`` Change/Delete plumbing: send the given commands and
+        overwrite ``statuses`` with any explicit per-item status the server
+        returns. Returns ``(new_sync_key, statuses)``.
+        """
         self._ensure_provisioned()
         w = WBXMLWriter()
         w.tag(
@@ -479,16 +636,16 @@ class Client:
         nodes = WBXMLReader(resp).parse()
         root = find(nodes, "AirSync.Sync")
         if root is None:
-            raise ProtocolError("Sync email changes: no Sync response")
+            raise ProtocolError("Sync changes: no Sync response")
         _check_status("Sync", text_of(_direct_find(root[2], "AirSync.Status")))
         collections = _direct_find(root[2], "AirSync.Collections")
         collection = _direct_find(collections[2], "AirSync.Collection") if collections else None
         if collection is None:
-            raise ProtocolError("Sync email changes: no Collection in response")
+            raise ProtocolError("Sync changes: no Collection in response")
         _check_status("Sync", text_of(_direct_find(collection[2], "AirSync.Status")))
         new_sync_key = text_of(_direct_find(collection[2], "AirSync.SyncKey"))
         if not new_sync_key:
-            raise ProtocolError("Sync email changes: no SyncKey in response")
+            raise ProtocolError("Sync changes: no SyncKey in response")
         responses = _direct_find(collection[2], "AirSync.Responses")
         if responses is not None:
             for name, _, children in responses[2]:
@@ -498,7 +655,7 @@ class Client:
                 status = text_of(_direct_find(children, "AirSync.Status"))
                 if server_id is not None and status is not None:
                     statuses[server_id] = status
-        return EmailChangesResult(sync_key=new_sync_key, statuses=statuses)
+        return new_sync_key, statuses
 
     def create_email_draft(
         self,
@@ -566,6 +723,60 @@ class Client:
                 )
             )
 
+        new_sync_key, status, server_id = self._sync_add(folder_id, sync_key, application_data, item_client_id)
+        return EmailAddResult(
+            sync_key=new_sync_key,
+            client_id=item_client_id,
+            status=status,
+            server_id=server_id,
+        )
+
+    def create_contact(
+        self,
+        folder_id: str,
+        sync_key: str,
+        contact: Contact,
+        *,
+        client_id: str | None = None,
+    ) -> ContactAddResult:
+        """Create one contact through EAS ``Sync Add``.
+
+        ``folder_id`` should identify the mailbox's Contacts folder and
+        ``sync_key`` must be its latest non-zero key. Only the fields set on
+        ``contact`` (see :class:`~pyactivesync.models.Contact`) are sent.
+        The result always includes the advanced collection ``SyncKey`` and
+        the ``ClientId``; successful additions also include the assigned
+        ``ServerId``. The returned key must be used for the next operation
+        on this collection.
+        """
+        if not folder_id:
+            raise ValueError("folder_id must not be empty")
+        if not sync_key or sync_key == "0":
+            raise ValueError("sync_key must be a non-zero synchronized key")
+        if not isinstance(contact, Contact):
+            raise TypeError("contact must be a Contact")
+        application_data = _contact_application_data(contact)
+        if not application_data:
+            raise ValueError("contact has no fields set")
+        item_client_id = client_id if client_id is not None else uuid.uuid4().hex
+        if not item_client_id:
+            raise ValueError("client_id must not be empty")
+
+        new_sync_key, status, server_id = self._sync_add(folder_id, sync_key, application_data, item_client_id)
+        return ContactAddResult(
+            sync_key=new_sync_key,
+            client_id=item_client_id,
+            status=status,
+            server_id=server_id,
+        )
+
+    def _sync_add(
+        self, folder_id: str, sync_key: str, application_data: list[NodeBuilder], client_id: str
+    ) -> tuple[str, str, str | None]:
+        """Shared ``Sync Add`` plumbing: send one Add command, parse the
+        response's ``SyncKey``, and locate the per-item ``Status``/``ServerId``
+        for ``client_id``. Returns ``(new_sync_key, status, server_id)``.
+        """
         self._ensure_provisioned()
         w = WBXMLWriter()
         w.tag(
@@ -591,7 +802,7 @@ class Client:
                                             "AirSync",
                                             "Add",
                                             children=[
-                                                wtag("AirSync", "ClientId", text=item_client_id),
+                                                wtag("AirSync", "ClientId", text=client_id),
                                                 wtag(
                                                     "AirSync",
                                                     "ApplicationData",
@@ -608,7 +819,7 @@ class Client:
             ],
         )
         # Sync Add is non-idempotent: a transport failure can occur after the
-        # server created the draft, so the request must not be retried blindly.
+        # server created the item, so the request must not be retried blindly.
         resp = self._post("Sync", w.render())
         nodes = WBXMLReader(resp).parse()
         root = find(nodes, "AirSync.Sync")
@@ -627,27 +838,18 @@ class Client:
         responses = _direct_find(collection[2], "AirSync.Responses")
         additions = [node for node in (responses[2] if responses else []) if node[0] == "AirSync.Add"]
         addition = next(
-            (
-                node
-                for node in additions
-                if text_of(_direct_find(node[2], "AirSync.ClientId")) == item_client_id
-            ),
+            (node for node in additions if text_of(_direct_find(node[2], "AirSync.ClientId")) == client_id),
             None,
         )
         if addition is None:
-            raise ProtocolError(f"Sync Add: no response for ClientId {item_client_id!r}")
+            raise ProtocolError(f"Sync Add: no response for ClientId {client_id!r}")
         status = text_of(_direct_find(addition[2], "AirSync.Status"))
         if status is None:
             raise ProtocolError("Sync Add: item response has no Status")
         server_id = text_of(_direct_find(addition[2], "AirSync.ServerId"))
         if status == "1" and not server_id:
             raise ProtocolError("Sync Add: successful item response has no ServerId")
-        return EmailAddResult(
-            sync_key=new_sync_key,
-            client_id=item_client_id,
-            status=status,
-            server_id=server_id,
-        )
+        return new_sync_key, status, server_id
 
     def get_item_estimate(self, folder_id: str, sync_key: str) -> int:
         """``GetItemEstimate`` needs a real (non-zero) ``SyncKey`` -- bootstrap one via ``sync_folder`` first."""

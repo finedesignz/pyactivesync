@@ -6,6 +6,7 @@ from pyactivesync._codepages import CODEPAGES, PAGE_INDEX, PAGE_ORDER, REVERSE
 # future edit to _codepages.py can't silently drift from the protocol.
 EXPECTED_PAGE_NUMBERS = {
     "AirSync": 0,
+    "Contacts": 1,
     "Email": 2,
     "Move": 5,
     "ItemEstimate": 6,

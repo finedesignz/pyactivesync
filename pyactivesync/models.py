@@ -120,6 +120,112 @@ class EmailAddResult:
 
 
 @dataclass(frozen=True, slots=True)
+class Contact:
+    """Writable MS-ASCONTACTS fields for one contact.
+
+    Every field is optional and maps 1:1 to a ``Contacts`` codepage tag.
+    Only fields set to a non-``None`` value (or a non-empty ``categories``)
+    are sent to the server.
+
+    Live testing against a real Exchange server showed a contact ``Sync
+    Change`` does *not* merge: properties omitted from the ``ApplicationData``
+    sent on an update were cleared server-side, not left untouched (confirmed
+    by fetching the item after an update that set only ``job_title`` --
+    ``first_name``/``last_name``/``company_name`` set at creation were gone).
+    Pass the full desired field set to :meth:`~pyactivesync.client.Client.apply_contact_changes`
+    on every update, not just the fields that changed.
+    """
+
+    first_name: str | None = None
+    middle_name: str | None = None
+    last_name: str | None = None
+    suffix: str | None = None
+    title: str | None = None
+    job_title: str | None = None
+    file_as: str | None = None
+    company_name: str | None = None
+    department: str | None = None
+    office_location: str | None = None
+    email1_address: str | None = None
+    email2_address: str | None = None
+    email3_address: str | None = None
+    home_phone_number: str | None = None
+    home2_phone_number: str | None = None
+    business_phone_number: str | None = None
+    business2_phone_number: str | None = None
+    mobile_phone_number: str | None = None
+    business_fax_number: str | None = None
+    home_fax_number: str | None = None
+    pager_number: str | None = None
+    car_phone_number: str | None = None
+    radio_phone_number: str | None = None
+    assistant_name: str | None = None
+    assistant_phone_number: str | None = None
+    business_address_street: str | None = None
+    business_address_city: str | None = None
+    business_address_state: str | None = None
+    business_address_postal_code: str | None = None
+    business_address_country: str | None = None
+    home_address_street: str | None = None
+    home_address_city: str | None = None
+    home_address_state: str | None = None
+    home_address_postal_code: str | None = None
+    home_address_country: str | None = None
+    other_address_street: str | None = None
+    other_address_city: str | None = None
+    other_address_state: str | None = None
+    other_address_postal_code: str | None = None
+    other_address_country: str | None = None
+    web_page: str | None = None
+    spouse: str | None = None
+    birthday: str | None = None
+    anniversary: str | None = None
+    categories: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ContactAddResult:
+    """Result of creating one contact with client-originated ``Sync Add``.
+
+    ``server_id`` is present on success. A rejected item still advances the
+    collection synchronization key and is returned with its per-item status.
+    """
+
+    sync_key: str
+    client_id: str
+    status: str
+    server_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ContactChange:
+    """One client-originated contact mutation sent through ``Sync``.
+
+    Set ``contact`` for an update, or ``delete=True`` to remove the
+    contact. Not both. See :class:`Contact` -- against a real Exchange
+    server, an update replaces rather than merges, so ``contact`` should
+    carry the full desired field set, not just what changed.
+    """
+
+    server_id: str
+    contact: Contact | None = None
+    delete: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ContactChangesResult:
+    """Result of applying one batch of contact changes.
+
+    EAS commonly omits per-item responses for successful changes.
+    ``statuses`` therefore starts at success (``"1"``) for every requested
+    item and is overwritten by any explicit status returned by the server.
+    """
+
+    sync_key: str
+    statuses: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
 class AttachmentInfo:
     """One attachment from a fetched item's ``Attachments`` container.
 
