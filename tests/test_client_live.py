@@ -244,6 +244,24 @@ def test_find_mailbox_free_text_read_only(live_client: Client) -> None:
     assert isinstance(result.items, list)
 
 
+def test_search_mailbox_free_text_read_only(live_client: Client) -> None:
+    """search_mailbox(free_text=...) is rerouted internally to the Find
+    command -- Search's own FreeText condition is a confirmed server-side
+    bug (Store.Status=110) -- and adapted back to search_mailbox's normal
+    list[dict[str, str]] shape."""
+    inbox = next(f for f in live_client.list_folders() if f.type == FolderType.INBOX)
+    results = live_client.search_mailbox(inbox.id, free_text="meeting", max_results=10)
+    assert isinstance(results, list)
+
+
+def test_search_mailbox_requires_exactly_one_condition(live_client: Client) -> None:
+    inbox = next(f for f in live_client.list_folders() if f.type == FolderType.INBOX)
+    with pytest.raises(ValueError):
+        live_client.search_mailbox(inbox.id)
+    with pytest.raises(ValueError):
+        live_client.search_mailbox(inbox.id, date_received_after="2020-01-01T00:00:00.000Z", free_text="meeting")
+
+
 def test_find_gal_read_only(live_client: Client) -> None:
     result = live_client.find_gal("Mart")
     assert result.status == "1"

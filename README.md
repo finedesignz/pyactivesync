@@ -107,7 +107,7 @@ sync with a local cache.
 | `Ping` | `Client.ping()` |
 | `ResolveRecipients` | `Client.resolve_recipients()` |
 | `Search` (GAL) | `Client.search_gal()` |
-| `Search` (Mailbox, structured) | `Client.search_mailbox()` |
+| `Search` (Mailbox, structured or free text via `Find`) | `Client.search_mailbox()` |
 | `Find` (GAL/Mailbox free text) | `Client.find_gal()`/`Client.find_mailbox()` |
 | `Settings` (Oof get/set) | `Client.get_oof()`/`set_oof()` |
 
@@ -144,21 +144,26 @@ not by itself make an ambiguous SendMail safe to retry: duplicate-ClientId
 behavior is server-dependent, and pyactivesync never automatically retries
 this non-idempotent command.
 
-`search_mailbox()` deliberately has no `free_text=` parameter: full-text
-`Search` conditions are known to fail against real Exchange servers with
-`Store.Status=110`, a server-side bug in EAS's `Search` handling rather
-than a WBXML encoding issue (confirmed by cross-checking the same
-mailbox's content index through an unrelated protocol, which returns
-correct results for the same query). Shipping that parameter would just
-reproduce the failure for every caller.
+A `FreeText` condition on the `Search` command itself is known to fail
+against real Exchange servers with `Store.Status=110`, a server-side bug
+in EAS's `Search` handling rather than a WBXML encoding issue (confirmed
+by cross-checking the same mailbox's content index through an unrelated
+protocol, which returns correct results for the same query; re-confirmed
+live as of 2026-08-23 -- still broken server-side). `search_mailbox()`
+accepts a `free_text=` parameter anyway: when given, it transparently
+reroutes the request through the EAS 16.1 `Find` command instead (see
+below), which implements full-text search correctly, and adapts the
+result back to `search_mailbox()`'s normal `list[dict[str, str]]` shape.
+Pass exactly one of `date_received_after=` or `free_text=`.
 
-EAS 16.1's separate `Find` command is available through `find_mailbox()`
-and `find_gal()`. Both return a `FindResult` containing the server's status,
-range, actual number of returned items, reusable search id, and flattened
-result properties. This is the supported free-text mailbox-search path:
-unlike the older `Search` command, `Find` returned matching mailbox results
-in live EAS 16.1 testing. `FindResult.total` is computed from the returned
-results rather than trusting the server's advisory `Find:Total` value.
+EAS 16.1's separate `Find` command is also available directly through
+`find_mailbox()` and `find_gal()`. Both return a `FindResult` containing
+the server's status, range, actual number of returned items, reusable
+search id, and flattened result properties. Call `find_mailbox()` directly
+instead of `search_mailbox(free_text=...)` when you need pagination
+(`range_start=`/`search_id=`) or the raw `FindResult`. `FindResult.total`
+is computed from the returned results rather than trusting the server's
+advisory `Find:Total` value.
 
 ## Development
 

@@ -1060,22 +1060,38 @@ class Client:
         self,
         folder_id: str,
         *,
-        date_received_after: str,
+        date_received_after: str | None = None,
+        free_text: str | None = None,
         item_class: str = "Email",
         max_results: int = 10,
     ) -> list[dict[str, str]]:
-        """Structured mailbox search: items of ``item_class`` in ``folder_id``
+        """Mailbox search: items of ``item_class`` in ``folder_id``, either
         received after ``date_received_after`` (an ``AirSyncBase``-style UTC
-        timestamp, e.g. ``"2020-01-01T00:00:00.000Z"``).
+        timestamp, e.g. ``"2020-01-01T00:00:00.000Z"``) or matching
+        ``free_text``. Exactly one of the two must be given.
 
-        There is deliberately no ``free_text=`` parameter: full-text search
-        conditions in ``Search`` are known to fail against real servers
-        with ``Store.Status=110`` (a server-side bug, not a WBXML encoding
-        issue -- confirmed by cross-checking the same mailbox's content
-        index through an unrelated protocol). Shipping that parameter would
-        just reproduce the failure for every caller; only the structured
-        condition below is exposed.
+        A ``FreeText`` condition on the ``Search`` command itself is known to
+        fail against real servers with ``Store.Status=110`` (a confirmed
+        server-side bug, not a WBXML encoding issue). ``free_text=`` here is
+        served through the EAS 16.1 ``Find`` command instead (see
+        ``find_mailbox``), which implements full-text search correctly, and
+        the result is adapted back to this method's ``list[dict[str, str]]``
+        shape. Callers who need pagination or the raw ``FindResult`` should
+        call ``find_mailbox`` directly.
         """
+        if (date_received_after is None) == (free_text is None):
+            raise ValueError("pass exactly one of date_received_after or free_text")
+        if free_text is not None:
+            result = self.find_mailbox(free_text, folder_id=folder_id, item_class=item_class, max_results=max_results)
+            return [
+                {
+                    **({"AirSync.ServerId": item.server_id} if item.server_id is not None else {}),
+                    **({"AirSync.CollectionId": item.collection_id} if item.collection_id is not None else {}),
+                    **item.fields,
+                }
+                for item in result.items
+            ]
+        assert date_received_after is not None
         self._ensure_provisioned()
         w = WBXMLWriter()
         w.tag(
