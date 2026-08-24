@@ -417,6 +417,11 @@ class Client:
             ],
         )
         resp = self._post("Sync", w.render(), idempotent=True)
+        if not resp:
+            # Some servers send an empty body for a collection with nothing to
+            # report (observed live against an empty folder) instead of an
+            # envelope that merely echoes the unchanged SyncKey.
+            return SyncResult(sync_key=sync_key, added=[], changed=[], deleted=[], more_available=False)
         nodes = WBXMLReader(resp).parse()
         status = text_of(find(nodes, "AirSync.Status"))
         _check_status("Sync", status)
