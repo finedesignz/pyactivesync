@@ -26,6 +26,27 @@ Basic auth over HTTPS — worked on the first try. No OAuth/Bearer challenge see
 - Phase 5 Ping: succeeded (status `2`, no changed folders in the short window tested).
 - Phase 5 SendMail: **failed, EAS status 120 (`MailSubmissionFailed`)** — a global/server-side status, not one pyactivesync maps by name (library only maps 101/InvalidContent for SendMail). Not a retcode indicating auth/library incompatibility; everything else on the same authenticated session worked.
 
+## SendMail root-cause evidence (added 2026-10-28)
+Raw HTTP response, captured by intercepting the transport layer directly (not library-interpreted):
+
+```
+HTTP status: 200 OK
+Content-Type: application/vnd.ms-sync.wbxml
+X-CalculatedBETarget: usmailext053.jwpub.org
+X-BEServer: USMAILEXT053
+X-FEServer: USMAILEXT065
+X-DiagInfo: USMAILEXT053
+X-MS-BackOffDuration: M/360
+WBXML body (decoded): SendMail Status = 120
+```
+
+- Backend hostname/header style confirms jwpub.org mail is **on-premises Exchange**, not Exchange Online.
+- The request reached the mailbox server cleanly (200 OK, well-formed WBXML) — rules out network/auth/protocol-version causes.
+- Status 120 is raised at the submission stage (post-validation), not a malformed-request code (101-107) — consistent with a server-side policy decision, not a content problem.
+- `X-MS-BackOffDuration: M/360` is only emitted when a client-throttling/policy check ran against the request — circumstantial evidence the server is evaluating (and failing) the send against an anti-abuse or EAS-send policy, independent of the account's own mailbox permissions.
+
+**Most likely root cause (moderate confidence):** a server-side anti-abuse/outbound policy on the on-prem Exchange org is blocking `SendMail` specifically — common hardening that lets a device read mail immediately but blocks compose/send until the device ages, or disables EAS SendMail org-wide. This matches the exact asymmetry observed (every read op works, only send fails). Can't fully disambiguate "new-device cooldown" vs. "EAS send disabled org-wide" from the client side; confirming needs Exchange-side transport/ActiveSync logs (IT/Bethel admin access), out of scope for this client-side test. Switching EAS libraries (e.g. to TbSync) will not change this outcome — it's server-side, not a library gap.
+
 ## Library bugs found
 None observed in the paths exercised (provision, list_folders, sync_folder bootstrap+delta, fetch_item, ping). `send_mail` correctly surfaced the server's status via `StatusError`; this is expected behavior, not a bug.
 
