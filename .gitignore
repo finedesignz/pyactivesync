@@ -16,3 +16,6 @@ htmlcov/
 .env
 *.log
 .scratch_probe4.py
+.scratch_probe_diag.py
+.scratch_probe5.py
+.scratch_probe5b.py
