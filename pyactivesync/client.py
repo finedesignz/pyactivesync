@@ -161,16 +161,25 @@ class Client:
         device_id: str,
         user: str | None = None,
         device_type: str = "pyactivesync",
+        device_model: str = "pyactivesync",
+        device_friendly_name: str = "pyactivesync client",
+        device_os: str = "Linux",
+        user_agent: str = "pyactivesync/0.1",
         verify_ssl: bool = True,
         timeout: float = 30.0,
     ) -> None:
         self.user = user or username
+        self._device_model = device_model
+        self._device_friendly_name = device_friendly_name
+        self._device_os = device_os
+        self._user_agent = user_agent
         self._transport = Transport(
             server,
             username,
             password,
             device_id=device_id,
             device_type=device_type,
+            user_agent=user_agent,
             verify_ssl=verify_ssl,
             timeout=timeout,
         )
@@ -229,10 +238,10 @@ class Client:
                             "Settings",
                             "Set",
                             children=[
-                                wtag("Settings", "Model", text="pyactivesync"),
-                                wtag("Settings", "FriendlyName", text="pyactivesync client"),
-                                wtag("Settings", "OS", text="Linux"),
-                                wtag("Settings", "UserAgent", text="pyactivesync/0.1"),
+                                wtag("Settings", "Model", text=self._device_model),
+                                wtag("Settings", "FriendlyName", text=self._device_friendly_name),
+                                wtag("Settings", "OS", text=self._device_os),
+                                wtag("Settings", "UserAgent", text=self._user_agent),
                             ],
                         ),
                     ],

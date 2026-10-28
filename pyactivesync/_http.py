@@ -22,6 +22,7 @@ class Transport:
         *,
         device_id: str,
         device_type: str = "pyactivesync",
+        user_agent: str = "pyactivesync/0.1",
         verify_ssl: bool = True,
         timeout: float = 30.0,
     ) -> None:
@@ -34,6 +35,7 @@ class Transport:
         self.session = requests.Session()
         self.session.auth = (username, password)
         self.session.verify = verify_ssl
+        self.session.headers["User-Agent"] = user_agent
 
     def post(
         self,
