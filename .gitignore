@@ -13,3 +13,5 @@ venv/
 .coverage.*
 htmlcov/
 *.egg
+.env
+*.log
