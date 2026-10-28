@@ -15,3 +15,4 @@ htmlcov/
 *.egg
 .env
 *.log
+.scratch_probe4.py
