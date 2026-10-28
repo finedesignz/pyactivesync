@@ -40,6 +40,8 @@ X-MS-BackOffDuration: M/360
 WBXML body (decoded): SendMail Status = 120
 ```
 
+**Recipient-independence check:** re-ran the same send against a different real recipient (`EichelkrauJ6@jwpub.org`, not self) — identical result, same Status=120, same backend/headers. Rules out a self-send-only restriction; this is a blanket block on `SendMail` for this account/device, independent of recipient. Strengthens the org-level-policy theory over any per-recipient or self-send-specific rule.
+
 - Backend hostname/header style confirms jwpub.org mail is **on-premises Exchange**, not Exchange Online.
 - The request reached the mailbox server cleanly (200 OK, well-formed WBXML) — rules out network/auth/protocol-version causes.
 - Status 120 is raised at the submission stage (post-validation), not a malformed-request code (101-107) — consistent with a server-side policy decision, not a content problem.
