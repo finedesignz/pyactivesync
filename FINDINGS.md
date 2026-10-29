@@ -74,3 +74,10 @@ Plan's Phase 5 pass bar is 4/4 steps working. **3 of 4 passed** (sync, fetch, pi
 Greenlight for read-only client features (inbox sync, folder list, fetch/read) is clear. Send-via-EAS is blocked server-side; a client needs either (a) a different outbound path (e.g. SMTP submit, if offered/allowed for this account) or (b) to treat compose as read-only inbox/calendar sync only, with send out of scope. This is a real server-side restriction, not something to patch around in the client — needs an owner call on whether compose is in scope at all for this project.
 
 Test devices `TiTowerTest01` (pyactivesync identity, quarantined) and `JWMailTest01` (JWMail identity, reads working) are both still registered pending IT approval of the `JWMail` device type.
+
+## Re-test after quarantine cleared (2026-10-29)
+OWA Options > Mobile devices now lists both `JWMailTest01` and `JWMailPolicyProbe01` with status **OK** (no longer Quarantined) — the owner's "auto-clears after about a day" expectation held. Confirmed live: `list_folders()` succeeds for both device IDs.
+
+**`SendMail` still returns Status=120 on both**, unchanged from before the quarantine cleared. This rules out the theory that quarantine alone explained the send block — **quarantine and the SendMail block are two independent restrictions.** Clearing device-access quarantine only unblocks sync; it does not touch `SendMail`. The `SendMail` failure is most likely an org-wide EAS outbound-send policy (common on-prem Exchange hardening: ActiveSync devices can sync but cannot submit mail via EAS at all, regardless of device trust), not a per-device state. This can't be confirmed further from the client side — it needs Bethel/jwpub.org Exchange admin confirmation of whether EAS `SendMail` is enabled for the org or this mailbox at all.
+
+**Updated recommendation:** do not block the `JWMail` IT-approval ask on this — approval of the device type will very likely only resolve sync/read, not send. If compose/send is in scope for the client, plan on it from the start, independent of device-type approval.

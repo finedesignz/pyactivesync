@@ -21,3 +21,4 @@ htmlcov/
 .scratch_probe5b.py
 .scratch_probe_jwmail.py
 .scratch_probe_policy.py
+.scratch_probe_jwmail_send.py
