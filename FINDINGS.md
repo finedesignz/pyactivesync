@@ -81,3 +81,6 @@ OWA Options > Mobile devices now lists both `JWMailTest01` and `JWMailPolicyProb
 **`SendMail` still returns Status=120 on both**, unchanged from before the quarantine cleared. This rules out the theory that quarantine alone explained the send block — **quarantine and the SendMail block are two independent restrictions.** Clearing device-access quarantine only unblocks sync; it does not touch `SendMail`. The `SendMail` failure is most likely an org-wide EAS outbound-send policy (common on-prem Exchange hardening: ActiveSync devices can sync but cannot submit mail via EAS at all, regardless of device trust), not a per-device state. This can't be confirmed further from the client side — it needs Bethel/jwpub.org Exchange admin confirmation of whether EAS `SendMail` is enabled for the org or this mailbox at all.
 
 **Updated recommendation:** do not block the `JWMail` IT-approval ask on this — approval of the device type will very likely only resolve sync/read, not send. If compose/send is in scope for the client, plan on it from the start, independent of device-type approval.
+
+## Owner decision (2026-10-29)
+Scope for now: **receive/read only via EAS** (inbox sync, folder list, fetch). Send is out of scope until the org-side EAS SendMail restriction is resolved (separate ask to Bethel IT, or a different outbound path) — not a client-side problem to solve.
